@@ -7,6 +7,8 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(adabag)
+library(FNN)
 ```
 
 ## R Markdown
@@ -16,15 +18,68 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r cars}
-summary(cars)
+breast <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer/breast-cancer.data")
+names(breast) <- c("Class","age","menopause","tumor.size","inv.nodes","node.caps","deg.malig","breast","breast.quad","irradiat")
+form <- "Class ~ age + menopause + tumor.size + inv.nodes + node.caps + deg.malig + breast + breast.quad + irradiat"
+#breast$Class <- as.numeric(breast$Class)
+breast.numeric<-as.data.frame(sapply(breast,function(x) as.numeric(x)))
+breast.factor<-as.data.frame(sapply(breast.numeric,function(x) as.factor(x)))
+str(breast.factor)
 ```
 
 ## Including Plots
 
 You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r pressure}
+adaboost<-boosting(form, data=breast.factor, boos=TRUE, mfinal=20,coeflearn='Breiman')
+summary(adaboost)
+```
+
+```{r}
+errorevol(adaboost,breast.factor)
+predict(adaboost,breast.factor)
+t1<-adaboost$trees[[1]]
+library(tree)
+plot(t1)
+text(t1,pretty=0)
+```
+
+```{r}
+adaboost$weights
+```
+
+```{r}
+knn.matrix <- get.knn(breast.numeric, k=7)
+knn.matrix
+```
+
+```{r}
+predict(adaboost$trees[1],breast.factor,type="class")
+```
+
+```{r}
+Ks <- c(2,5,10,20,140,350,699)
+accuracy.list <- rep(NA, length(Ks))
+lower.list <- rep(NA, length(Ks))
+upper.list <- rep(NA, length(Ks))
+length(accuracy.list)
+
+```
+
+```{r}
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

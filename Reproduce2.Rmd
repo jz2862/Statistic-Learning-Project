@@ -1,0 +1,142 @@
+---
+title: "Reproduce"
+author: "Jialin Zhao jz2862"
+date: "12/13/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(adabag)
+library(RWeka)
+library(Metrics)
+library(gplots)
+library(gmodels)
+set.seed(123)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+breast <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data")
+names(breast) <- c("id","Clump.Thickness","Cell.Size","Cell.Shape","Marginal.Adhesion","Single.Epithelial.Cell.Size","Bare.Nuclei","Bland.Chromatin","Normal.Nucleoli","Mitoses","Class")
+form <- "Class ~ Clump.Thickness + Cell.Size + Cell.Shape + Marginal.Adhesion + Single.Epithelial.Cell.Size + Bare.Nuclei + Bland.Chromatin + Normal.Nucleoli + Mitoses"
+```
+
+```{r preprocessing}
+breast.factor<-as.data.frame(sapply(breast,function(x) as.factor(x)))
+breast.factor
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r Train C4.5 tree model}
+C4.5 <- J48(form, data=breast.factor)
+summary(C4.5)
+```
+
+```{r}
+C4.5.predictions <- predict(C4.5, breast.factor[,2:10])
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+Ks <- c(5,8,10,20,140,200,350)
+accuracy.list <- rep(NA, length(Ks))
+lower.list <- rep(NA, length(Ks))
+upper.list <- rep(NA, length(Ks))
+
+for(m in seq(1, 7, by=1)){
+  k = Ks[m]
+  folds <- split(breast.factor, cut(sample(1:nrow(breast)),k))
+  accs <- rep(NA, length(folds))
+  
+  for (i in 1:length(folds)) {
+   test <- ldply(folds[i], data.frame)
+   train <- ldply(folds[-i], data.frame)
+   tmp.model <- rpart(form , train, method = "class")
+   tmp.predict <- predict(tmp.model, newdata = test, type = "class")
+   conf.mat <- table(test$Class, tmp.predict)
+   accs[i] <- sum(diag(conf.mat))/sum(conf.mat)
+  }
+  print(sprintf("average accuracy using k-fold cross-validation: %.3f percent",100*mean(accs)))
+  accuracy.list[m] <- mean(accs)
+  lower.list[m] <- mean(accs) - ci(accs)[2]
+  upper.list[m] <- ci(accs)[3] - mean(accs)
+}
+
+```
+
+```{r}
+lower.list
+```
+
+```{r}
+plotCI(seq(1,7,by=1),accuracy.list,uiw=upper.list,liw = lower.list,ylim = c(0.8,1))
+```
+
+```{r}
+length(lower.list)
+```
+
+```{r}
+  # plot means and
+  data(state)
+  tmp   <- split(state.area, state.region)
+  means <- sapply(tmp, mean)
+  stdev <- sqrt(sapply(tmp, var))
+  n     <- sapply(tmp,length)
+  ciw   <- qt(0.975, n) * stdev / sqrt(n)
+
+  # plain
+  plotCI(x=means, uiw=ciw)
+
+  # prettier
+  plotCI(x=means, uiw=ciw, col="black", barcol="blue", lwd=1)
+
+  # give mean values
+  plotCI(x=means, uiw=ciw, col="black", barcol="blue",
+         labels=round(means,-3), xaxt="n", xlim=c(0,5) )
+  axis(side=1, at=1:4, labels=names(tmp), cex=0.7)
+
+  # better yet, just use plotmeans ... #
+  plotmeans( state.area ~ state.region )
+
+```
+
+```{r}
+ci(errs)[1]
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
