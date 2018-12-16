@@ -66,7 +66,7 @@ for(m in seq(1, 7, by=1)){
   for (i in 1:length(folds)) {
    test <- ldply(folds[i], data.frame)
    train <- ldply(folds[-i], data.frame)
-   tmp.model <- rpart(form , train, method = "class")
+   tmp.model <- J48(form, data=train)
    tmp.predict <- predict(tmp.model, newdata = test, type = "class")
    conf.mat <- table(test$Class, tmp.predict)
    accs[i] <- sum(diag(conf.mat))/sum(conf.mat)
@@ -82,13 +82,16 @@ for(m in seq(1, 7, by=1)){
 
 ```{r}
 upper.list[1] <- 0.05
+tmp.model <- J48(form, data=train)
+tmp.predict <- predict(tmp.model, newdata = test, type = "class")
+tmp.predict
 ```
 
 ```{r}
 plotCI(seq(1,7,by=1),accuracy.list,uiw=upper.list,ylim = c(0.8,1), labels=round(c(2,5,10,20,-5,-2,-1),-3),type = "b",xaxt="n",ylab = 'accuracy',xlab="folds",col='blue',pch=18,col.lab='red',
        panel.first = c(abline(h=0.9137,lwd=10, col="grey")))
 axis(side=1, at=1:7, labels=c(2,5,10,20,-5,-2,-1), cex=0.7)
-title(main = list("K-Fold CV Accuracy vs Size of K", cex = 1.5,
+title(main = list("K-Fold CV Accuracy Bias vs Size of K", cex = 1.5,
                   col = "red", font = 3))
 ```
 

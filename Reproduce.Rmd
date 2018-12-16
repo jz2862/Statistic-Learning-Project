@@ -9,6 +9,10 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 library(adabag)
 library(FNN)
+library(dplyr)
+library(neuralnet)
+library(plyr)
+
 ```
 
 ## R Markdown
@@ -18,13 +22,17 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r cars}
-breast <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer/breast-cancer.data")
-names(breast) <- c("Class","age","menopause","tumor.size","inv.nodes","node.caps","deg.malig","breast","breast.quad","irradiat")
-form <- "Class ~ age + menopause + tumor.size + inv.nodes + node.caps + deg.malig + breast + breast.quad + irradiat"
-#breast$Class <- as.numeric(breast$Class)
-breast.numeric<-as.data.frame(sapply(breast,function(x) as.numeric(x)))
-breast.factor<-as.data.frame(sapply(breast.numeric,function(x) as.factor(x)))
-str(breast.factor)
+breast <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data")
+names(breast) <- c("id","Clump.Thickness","Cell.Size","Cell.Shape","Marginal.Adhesion","Single.Epithelial.Cell.Size","Bare.Nuclei","Bland.Chromatin","Normal.Nucleoli","Mitoses","Class")
+form <- "Class ~ Clump.Thickness + Cell.Size + Cell.Shape + Marginal.Adhesion + Single.Epithelial.Cell.Size + Bare.Nuclei + Bland.Chromatin + Normal.Nucleoli + Mitoses"
+#breast.factor<-as.data.frame(sapply(breast.numeric,function(x) as.factor(x)))
+#str(breast.factor)
+keeps <- c("Clump.Thickness","Cell.Size","Cell.Shape","Marginal.Adhesion","Single.Epithelial.Cell.Size","Bare.Nuclei","Bland.Chromatin","Normal.Nucleoli","Mitoses","Class")
+
+breast.factor<-as.data.frame(sapply(breast,function(x) as.factor(x)))
+breast.factor<-breast.factor[keeps]
+#breast.numeric<-as.data.frame(sapply(breast.factor,function(x) as.numeric(x)))
+breast.factor
 ```
 
 ## Including Plots
@@ -32,42 +40,152 @@ str(breast.factor)
 You can also embed plots, for example:
 
 ```{r pressure}
-adaboost<-boosting(form, data=breast.factor, boos=TRUE, mfinal=20,coeflearn='Breiman')
+adaboost<-boosting(form, data=breast.factor, boos=TRUE, mfinal=10,coeflearn='Breiman')
 summary(adaboost)
 ```
 
 ```{r}
-errorevol(adaboost,breast.factor)
-predict(adaboost,breast.factor)
-t1<-adaboost$trees[[1]]
-library(tree)
-plot(t1)
-text(t1,pretty=0)
+#errorevol(adaboost,breast.factor)
+res <- predict(adaboost,breast.factor)
+res$error
+#t1<-adaboost$trees[[1]]
+#library(tree)
+#plot(t1)
+#text(t1,pretty=0)
 ```
 
 ```{r}
-adaboost$weights
+k = 10
+folds <- split(breast.factor, cut(sample(1:nrow(breast)),k))
+accs <- rep(NA, length(folds))
+for (i in 1:length(folds)) {
+ test <- ldply(folds[i], data.frame)
+ train <- ldply(folds[-i], data.frame)
+ tmp.model <- boosting(form, data=train, boos=TRUE, mfinal=10,coeflearn='Breiman')
+ tmp.predict <- predict(tmp.model, newdata = test, type = "class")
+ accs[i] <- 1-tmp.predict$error
+}
+print(sprintf("average accuracy using k-fold cross-validation: %.3f percent",100*mean(accs)))
 ```
 
 ```{r}
-knn.matrix <- get.knn(breast.numeric, k=7)
-knn.matrix
+knn.matrix <- get.knnx(train, query=test,k=7)
+indexes <- knn.matrix$nn.index[1,]
+data <- train[c(knn.matrix$nn.index[1,]),]
 ```
 
 ```{r}
-predict(adaboost$trees[1],breast.factor,type="class")
+predict.RegionBoost <- function(data,train,adaboost){
+  data.numeric <- as.data.frame(sapply(data,function(x) as.numeric(x)))
+  train.numeric <- as.data.frame(sapply(train,function(x) as.numeric(x)))
+  data.numeric <- data.numeric[keeps]
+  train.numeric <- train.numeric[keeps]
+  result <-rep(NA, nrow(data))
+
+
+  for (idx in seq(1,nrow(data),by=1)) {
+    test <- data[idx,]
+    test.numeric <- data.numeric[idx,]
+    #print(test.numeric)
+    #print(train.numeric)
+    is.na(test.numeric)
+    knn.matrix <- get.knnx(train.numeric, query=test.numeric,k=15)
+    #print(knn.matrix)
+    test <- train[c(knn.matrix$nn.index[1,]),]
+    for (i in seq(1,length(adaboost$tree),by=1)){
+      tree <- adaboost$tree[i]
+      accs <- rep(NA, nrow(test))
+      for(j in seq(1,nrow(test))){
+        tmp.predict <- predict(tree, newdata = test, type = "class")
+        conf.mat <- table(test$Class, tmp.predict[[1]])
+        accs[j] <- sum(diag(conf.mat))/sum(conf.mat)
+      }
+      adaboost$weights[i] <- mean(accs)
+    }
+    guagua <- predict(adaboost, newdata = data[idx,], type = "class")
+    result[idx] <- 1-guagua$error
+    #errors[idx] <- guagua$error
+  }
+  return(result)
+}
+
 ```
 
 ```{r}
-Ks <- c(2,5,10,20,140,350,699)
-accuracy.list <- rep(NA, length(Ks))
-lower.list <- rep(NA, length(Ks))
-upper.list <- rep(NA, length(Ks))
-length(accuracy.list)
+result <- predict.RegionBoost(breast.factor[1:100,],breast.factor,adaboost)
+```
+
+```{r}
+k = 10
+folds <- split(breast.factor, cut(sample(1:nrow(breast)),k))
+accs <- rep(NA, length(folds))
+for (i in 1:length(folds)) {
+ test <- ldply(folds[i], data.frame)
+ train <- ldply(folds[-i], data.frame)
+ tmp.model <- boosting(form, data=train, boos=TRUE, mfinal=10,coeflearn='Breiman')
+ tmp.predict <-predict.RegionBoost(test,train,tmp.model)
+ accs[i] <- mean(tmp.predict)
+}
+print(sprintf("average accuracy using k-fold cross-validation: %.3f percent",100*mean(accs)))
+```
+
+```{r}
+
+```
+
+```{r NN}
+max = apply(breast.numeric , 2 , max)
+min = apply(breast.numeric, 2 , min)
+breast.numeric.scaled = as.data.frame(scale(breast.numeric, center = min, scale = max - min))
+breast.numeric.scaled
+```
+
+```{r}
+tmp.model <- neuralnet(Class ~ Clump.Thickness + Cell.Size + Cell.Shape + Marginal.Adhesion + Single.Epithelial.Cell.Size + Bare.Nuclei + Bland.Chromatin + Normal.Nucleoli + Mitoses, data=breast.numeric.scaled, hidden = 5, linear.output = FALSE)
+plot(tmp.model,rep = 'best')
+tmp.predict <- neuralnet::compute(tmp.model,breast.numeric.scaled)
+```
+
+```{r}
+k = 10
+folds <- split(breast.numeric.scaled, cut(sample(1:nrow(breast.numeric.scaled)),k))
+accs <- rep(NA, length(folds))
+for (i in 1:length(folds)) {
+ test <- ldply(folds[i], data.frame)
+ train <- ldply(folds[-i], data.frame)
+ test<-test[keeps]
+ train<-train[keeps]
+ test[is.na(test)] <- 0
+ train[is.na(train)] <- 0
+ print(summary(train))
+ print(summary(test))
+ tmp.model <- neuralnet(form, data=breast.numeric.scaled, hidden = 5, linear.output = FALSE)
+ plot(tmp.model,rep = 'best')
+ tmp.predict <- compute(tmp.model,breast.numeric.scaled)
+ print(tmp.predict)
+ accs[i] <- 1-tmp.predict$error
+}
+print(sprintf("average accuracy using k-fold cross-validation: %.3f percent",100*mean(accs)))
+```
+
+```{r}
 
 ```
 
 ```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
 ```
 
 ```{r}
