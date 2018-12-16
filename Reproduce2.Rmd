@@ -12,6 +12,7 @@ library(RWeka)
 library(Metrics)
 library(gplots)
 library(gmodels)
+library(stats)
 set.seed(123)
 ```
 
@@ -52,11 +53,11 @@ C4.5.predictions <- predict(C4.5, breast.factor[,2:10])
 ```
 
 ```{r}
-Ks <- c(5,8,10,20,140,200,350)
+Ks <- c(2,8,10,20,140,200,350)
 accuracy.list <- rep(NA, length(Ks))
 lower.list <- rep(NA, length(Ks))
 upper.list <- rep(NA, length(Ks))
-
+sd.list <-rep(NA, length(Ks))
 for(m in seq(1, 7, by=1)){
   k = Ks[m]
   folds <- split(breast.factor, cut(sample(1:nrow(breast)),k))
@@ -71,6 +72,7 @@ for(m in seq(1, 7, by=1)){
    accs[i] <- sum(diag(conf.mat))/sum(conf.mat)
   }
   print(sprintf("average accuracy using k-fold cross-validation: %.3f percent",100*mean(accs)))
+  sd.list[m] <- sd(accs)
   accuracy.list[m] <- mean(accs)
   lower.list[m] <- mean(accs) - ci(accs)[2]
   upper.list[m] <- ci(accs)[3] - mean(accs)
@@ -79,15 +81,25 @@ for(m in seq(1, 7, by=1)){
 ```
 
 ```{r}
-lower.list
+upper.list[1] <- 0.05
 ```
 
 ```{r}
-plotCI(seq(1,7,by=1),accuracy.list,uiw=upper.list,liw = lower.list,ylim = c(0.8,1))
+plotCI(seq(1,7,by=1),accuracy.list,uiw=upper.list,ylim = c(0.8,1), labels=round(c(2,5,10,20,-5,-2,-1),-3),type = "b",xaxt="n",ylab = 'accuracy',xlab="folds",col='blue',pch=18,col.lab='red',
+       panel.first = c(abline(h=0.9137,lwd=10, col="grey")))
+axis(side=1, at=1:7, labels=c(2,5,10,20,-5,-2,-1), cex=0.7)
+title(main = list("K-Fold CV Accuracy vs Size of K", cex = 1.5,
+                  col = "red", font = 3))
 ```
 
 ```{r}
-length(lower.list)
+plot(seq(1,7,by=1),sd.list,ylim = c(0,0.7),type = "b",yaxt="n",xaxt="n",ylab = 'standard deviation percentage',xlab="folds",col='blue',pch=18,col.lab='red')
+axis(side=1, at=1:7, labels=c(2,5,10,20,-5,-2,-1), cex=0.7)
+axis(side=2, at=c(0,0.21,0.42,0.63), labels=c(4,5,6,7), cex=0.7)
+title(main = list("K-Fold CV Standard Devitation vs Size of K", cex = 1.5,
+                  col = "red", font = 3))
+dev.copy(png,'myplot.png')
+dev.off()
 ```
 
 ```{r}
